@@ -120,6 +120,17 @@ enum MagicEffectsType_t : uint8_t {
 	MAGIC_EFFECTS_CREATE_SOUND_SECONDARY_EFFECT = 7,
 };
 
+// Protocol 15.21: source attribution for magic and distance effects
+// Allows the client to control opacity per source type via sliders
+enum MagicEffectSources : uint8_t {
+	ME_SOURCE_DEFAULT = 0,      // always 100% opacity, not configurable by client
+	ME_SOURCE_OWN = 1,          // effects caused by own player
+	ME_SOURCE_OTHER_PLAYER = 2, // effects caused by other players
+	ME_SOURCE_MONSTER = 3,      // effects caused by monsters
+	ME_SOURCE_BOSS = 4,         // effects caused by bosses
+	ME_SOURCE_LAST = ME_SOURCE_BOSS
+};
+
 enum ImpactAnalyzerAndTracker_t : uint8_t {
 	ANALYZER_HEAL = 0,
 	ANALYZER_DAMAGE_DEALT = 1,

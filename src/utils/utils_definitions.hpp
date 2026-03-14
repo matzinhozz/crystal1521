@@ -823,3 +823,49 @@ enum Screenshot_t : uint8_t {
 	SCREENSHOT_TYPE_SKILLUP = 12,
 	SCREENSHOT_TYPE_GIFTOFLIFE = 13,
 };
+
+// Protocol 15.21: client event system (extended 0x75 packet)
+// Replaces screenshot triggers in new clients while keeping Screenshot_t for legacy
+enum ClientEventType_t : uint8_t {
+	CLIENT_EVENT_TYPE_SIMPLE = 1,
+	CLIENT_EVENT_TYPE_ACHIEVEMENT = 2,
+	CLIENT_EVENT_TYPE_TITLE = 3,
+	CLIENT_EVENT_TYPE_LEVEL = 4,
+	CLIENT_EVENT_TYPE_SKILL = 5,
+	CLIENT_EVENT_TYPE_BESTIARY = 6,
+	CLIENT_EVENT_TYPE_BOSSTIARY = 7,
+	CLIENT_EVENT_TYPE_QUEST = 8,
+	CLIENT_EVENT_TYPE_COSMETIC = 9,
+	CLIENT_EVENT_TYPE_PROFICIENCY = 10,
+};
+
+enum ClientEvent_t : uint8_t {
+	CLIENT_EVENT_NONE = 0,
+	CLIENT_EVENT_BOSSDEFEATED = 1,
+	CLIENT_EVENT_DEATHPVE = 2,
+	CLIENT_EVENT_DEATHPVP = 3,
+	CLIENT_EVENT_PLAYERKILLASSIST = 4,
+	CLIENT_EVENT_PLAYERKILL = 5,
+	CLIENT_EVENT_PLAYERATTACKING = 6,
+	CLIENT_EVENT_TREASUREFOUND = 7,
+	CLIENT_EVENT_GIFTOFLIFE = 8,
+	CLIENT_EVENT_ATTACKSTOPPED = 9,
+	CLIENT_EVENT_CAPACITYLIMIT = 10,
+	CLIENT_EVENT_OUTOFAMMO = 11,
+	CLIENT_EVENT_TARGETTOOCLOSE = 12,
+};
+
+// Protocol 15.21: Monk vocation state types (opcode 0xC1 server→client)
+enum class MonkData_t : uint8_t {
+	Harmony = 0x00,
+	Serenity = 0x01,
+	Virtue = 0x02,
+};
+
+// Protocol 15.21: Virtue sub-type for Monk vocation
+enum class Virtue_t : uint8_t {
+	None = 0x00,
+	Harmony = 0x01,
+	Justice = 0x02,
+	Sustain = 0x03,
+};

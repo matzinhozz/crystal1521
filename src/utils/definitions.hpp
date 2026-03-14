@@ -68,3 +68,10 @@
 #ifndef M_PI
 	#define M_PI 3.14159265358979323846
 #endif
+
+// Protocol 15.21: selective packet disabling for debugging and feature gating.
+// Uncomment any of the defines below to disable the corresponding packet group.
+// #define PROTOCOL_DISABLE_MAGIC_EFFECTS
+// #define PROTOCOL_DISABLE_MISSILES
+// #define PROTOCOL_DISABLE_MONK_STATES
+// #define PROTOCOL_DISABLE_SERVER_CONFIG

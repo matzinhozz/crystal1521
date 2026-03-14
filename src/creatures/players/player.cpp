@@ -3566,6 +3566,7 @@ void Player::addExperience(const std::shared_ptr<Creature> &target, uint64_t exp
 	if (currLevelExp >= nextLevelExp) {
 		// player has reached max level
 		levelPercent = 0;
+		levelProgress = 0;
 		sendStats();
 		return;
 	}
@@ -3683,8 +3684,10 @@ void Player::addExperience(const std::shared_ptr<Creature> &target, uint64_t exp
 
 	if (nextLevelExp > currLevelExp) {
 		levelPercent = Player::getPercentLevel(experience - currLevelExp, nextLevelExp - currLevelExp);
+		levelProgress = Player::calculateLevelProgress(experience - currLevelExp, nextLevelExp - currLevelExp);
 	} else {
 		levelPercent = 0;
+		levelProgress = 0;
 	}
 	sendStats();
 	sendExperienceTracker(rawExp, exp);
@@ -3768,8 +3771,10 @@ void Player::removeExperience(uint64_t exp, bool sendText /* = false*/) {
 	const uint64_t nextLevelExp = Player::getExpForLevel(level + 1);
 	if (nextLevelExp > currLevelExp) {
 		levelPercent = Player::getPercentLevel(experience - currLevelExp, nextLevelExp - currLevelExp);
+		levelProgress = Player::calculateLevelProgress(experience - currLevelExp, nextLevelExp - currLevelExp);
 	} else {
 		levelPercent = 0;
+		levelProgress = 0;
 	}
 	sendStats();
 	sendExperienceTracker(0, -static_cast<int64_t>(exp));
@@ -3785,6 +3790,15 @@ double_t Player::getPercentLevel(uint64_t count, uint64_t nextLevelCount) {
 		return 0;
 	}
 	return result;
+}
+
+// Protocol 15.21: returns progress in basis points (0-10000) for the new stats packet
+uint16_t Player::calculateLevelProgress(uint64_t count, uint64_t nextLevelCount) {
+	if (nextLevelCount == 0) {
+		return 0;
+	}
+	const uint64_t raw = (count * 10000) / nextLevelCount;
+	return static_cast<uint16_t>(std::min<uint64_t>(raw, 10000));
 }
 
 void Player::onBlockHit() {
@@ -4157,8 +4171,10 @@ void Player::death(const std::shared_ptr<Creature> &lastHitCreature) {
 			uint64_t nextLevelExp = Player::getExpForLevel(level + 1);
 			if (nextLevelExp > currLevelExp) {
 				levelPercent = Player::getPercentLevel(experience - currLevelExp, nextLevelExp - currLevelExp);
+				levelProgress = Player::calculateLevelProgress(experience - currLevelExp, nextLevelExp - currLevelExp);
 			} else {
 				levelPercent = 0;
+				levelProgress = 0;
 			}
 		}
 

@@ -249,9 +249,13 @@ void IOLoginDataLoad::loadPlayerExperience(const std::shared_ptr<Player> &player
 	player->experience = experience;
 
 	if (currExpCount < nextExpCount) {
-		player->levelPercent = static_cast<uint8_t>(std::round(Player::getPercentLevel(player->experience - currExpCount, nextExpCount - currExpCount)));
+		const uint64_t expDiff = player->experience - currExpCount;
+		const uint64_t expRange = nextExpCount - currExpCount;
+		player->levelPercent = static_cast<uint8_t>(std::round(Player::getPercentLevel(expDiff, expRange)));
+		player->levelProgress = Player::calculateLevelProgress(expDiff, expRange); // Protocol 15.21
 	} else {
 		player->levelPercent = 0;
+		player->levelProgress = 0;
 	}
 }
 

@@ -572,6 +572,11 @@ public:
 	uint8_t getLevelPercent() const {
 		return levelPercent;
 	}
+	// Protocol 15.21: basis points (0-10000) version of level progress
+	uint16_t getLevelProgress() const {
+		return levelProgress;
+	}
+	static uint16_t calculateLevelProgress(uint64_t count, uint64_t nextLevelCount);
 	uint32_t getMagicLevel() const;
 	uint32_t getLoyaltyMagicLevel() const;
 	uint32_t getBaseMagicLevel() const {
@@ -1794,6 +1799,7 @@ private:
 
 	uint8_t soul = 0;
 	uint8_t levelPercent = 0;
+	uint16_t levelProgress = 0; // Protocol 15.21: basis points 0-10000
 	uint16_t loyaltyBonusPercent = 0;
 	double_t magLevelPercent = 0;
 

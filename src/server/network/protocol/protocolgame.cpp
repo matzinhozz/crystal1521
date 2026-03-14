@@ -883,20 +883,24 @@ void ProtocolGame::onRecvFirstMessage(NetworkMessage &msg) {
 	std::string password;
 
 	if (authType != "session") {
-		size_t pos = sessionKey.find('\n');
-		if (pos == std::string::npos) {
+		// Protocol 15.21: session key may be "email\npassword\ntoken\ntimestamp" (4 parts)
+		// or the older "email\npassword" (2 parts). Parse all parts generically.
+		std::vector<std::string> sessionKeyParts;
+		size_t skStart = 0, skEnd;
+		while ((skEnd = sessionKey.find('\n', skStart)) != std::string::npos) {
+			sessionKeyParts.push_back(sessionKey.substr(skStart, skEnd - skStart));
+			skStart = skEnd + 1;
+		}
+		sessionKeyParts.push_back(sessionKey.substr(skStart));
+
+		if (sessionKeyParts.size() < 2 || sessionKeyParts[0].empty() || sessionKeyParts[1].empty()) {
 			ss << "You must enter your " << (oldProtocol ? "username" : "email") << ".";
 			disconnectClient(ss.str());
 			return;
 		}
-		accountDescriptor = sessionKey.substr(0, pos);
-		if (accountDescriptor.empty()) {
-			ss.str(std::string());
-			ss << "You must enter your " << (oldProtocol ? "username" : "email") << ".";
-			disconnectClient(ss.str());
-			return;
-		}
-		password = sessionKey.substr(pos + 1);
+		accountDescriptor = sessionKeyParts[0];
+		password = sessionKeyParts[1];
+		// sessionKeyParts[2] = token (2FA), sessionKeyParts[3] = timestamp (future use)
 	}
 
 	if (!oldProtocol && operatingSystem == CLIENTOS_NEW_LINUX) {
@@ -3743,7 +3747,7 @@ void ProtocolGame::sendCyclopediaCharacterGeneralStats() {
 
 	msg.add<uint64_t>(player->getExperience());
 	msg.add<uint16_t>(player->getLevel());
-	msg.addByte(player->getLevelPercent());
+	msg.add<uint16_t>(player->getLevelProgress()); // Protocol 15.21: uint16_t basis points (0-10000)
 	msg.add<uint16_t>(player->getBaseXpGain()); // BaseXPGainRate
 	msg.add<uint16_t>(player->getDisplayGrindingXpBoost()); // LowLevelBonus
 	msg.add<uint16_t>(player->getDisplayXpBoostPercent()); // XPBoost
@@ -4369,6 +4373,10 @@ void ProtocolGame::sendCyclopediaCharacterTitles() {
 	writeToOutputBuffer(msg);
 }
 
+// Protocol 15.21 note: this function was expanded in Canary PR #3808 to include
+// 5-component breakdowns for crit/leech, element-specific crits, life/mana gain on hit/kill,
+// and extra auto-attack/spell damage fields. The trailing zero-filled fields below are
+// placeholders for those values. Update from the exact 15.21 Canary diff when integrating.
 void ProtocolGame::sendCyclopediaCharacterOffenceStats() {
 	if (!player || oldProtocol) {
 		return;
@@ -6877,7 +6885,7 @@ void ProtocolGame::sendPingBack() {
 	writeToOutputBuffer(msg);
 }
 
-void ProtocolGame::sendDistanceShoot(const Position &from, const Position &to, uint16_t type) {
+void ProtocolGame::sendDistanceShoot(const Position &from, const Position &to, uint16_t type, uint8_t effectSource) {
 	if (oldProtocol && type > 0xFF) {
 		return;
 	}
@@ -6894,6 +6902,11 @@ void ProtocolGame::sendDistanceShoot(const Position &from, const Position &to, u
 		msg.add<uint16_t>(type);
 		msg.addByte(static_cast<uint8_t>(static_cast<int8_t>(static_cast<int32_t>(to.x) - static_cast<int32_t>(from.x))));
 		msg.addByte(static_cast<uint8_t>(static_cast<int8_t>(static_cast<int32_t>(to.y) - static_cast<int32_t>(from.y))));
+		// Protocol 15.21: source attribution byte for client opacity control
+		if (effectSource > ME_SOURCE_LAST) {
+			effectSource = ME_SOURCE_DEFAULT;
+		}
+		msg.addByte(effectSource);
 		msg.addByte(MAGIC_EFFECTS_END_LOOP);
 	}
 	writeToOutputBuffer(msg);
@@ -6944,7 +6957,7 @@ void ProtocolGame::sendRestingStatus(uint8_t protection) {
 	writeToOutputBuffer(msg);
 }
 
-void ProtocolGame::sendMagicEffect(const Position &pos, uint16_t type) {
+void ProtocolGame::sendMagicEffect(const Position &pos, uint16_t type, uint8_t effectSource) {
 	if (!canSee(pos) || (oldProtocol && type > 0xFF)) {
 		return;
 	}
@@ -6959,6 +6972,11 @@ void ProtocolGame::sendMagicEffect(const Position &pos, uint16_t type) {
 		msg.addPosition(pos);
 		msg.addByte(MAGIC_EFFECTS_CREATE_EFFECT);
 		msg.add<uint16_t>(type);
+		// Protocol 15.21: source attribution byte for client opacity control
+		if (effectSource > ME_SOURCE_LAST) {
+			effectSource = ME_SOURCE_DEFAULT;
+		}
+		msg.addByte(effectSource);
 		msg.addByte(MAGIC_EFFECTS_END_LOOP);
 	}
 	writeToOutputBuffer(msg);
@@ -7359,36 +7377,7 @@ void ProtocolGame::sendAddCreature(const std::shared_ptr<Creature> &creature, co
 	sendCreatureLight(creature);
 
 	sendVIPGroups();
-
-	const auto &vipEntries = IOLoginData::getVIPEntries(player->getAccountId());
-
-	if (player->isAccessPlayer()) {
-		for (const VIPEntry &entry : vipEntries) {
-			VipStatus_t vipStatus = VipStatus_t::ONLINE;
-
-			std::shared_ptr<Player> vipPlayer = g_game().getPlayerByGUID(entry.guid);
-			if (!vipPlayer) {
-				vipStatus = VipStatus_t::OFFLINE;
-			} else if (vipPlayer->isExerciseTraining()) {
-				vipStatus = VipStatus_t::TRAINING;
-			}
-
-			sendVIP(entry.guid, entry.name, entry.description, entry.icon, entry.notify, vipStatus);
-		}
-	} else {
-		for (const VIPEntry &entry : vipEntries) {
-			VipStatus_t vipStatus = VipStatus_t::ONLINE;
-
-			std::shared_ptr<Player> vipPlayer = g_game().getPlayerByGUID(entry.guid);
-			if (!vipPlayer || vipPlayer->isInGhostMode()) {
-				vipStatus = VipStatus_t::OFFLINE;
-			} else if (vipPlayer->isExerciseTraining()) {
-				vipStatus = VipStatus_t::TRAINING;
-			}
-
-			sendVIP(entry.guid, entry.name, entry.description, entry.icon, entry.notify, vipStatus);
-		}
-	}
+	sendFullVipList(); // Protocol 15.21: consolidated VIP list with ghost mode awareness
 
 	sendInventoryIds();
 	std::shared_ptr<Item> slotItem = player->getInventoryItem(CONST_SLOT_BACKPACK);
@@ -8005,6 +7994,27 @@ void ProtocolGame::sendVIPGroups() {
 	writeToOutputBuffer(msg);
 }
 
+// Protocol 15.21: consolidated VIP list send with proper ghost mode handling
+void ProtocolGame::sendFullVipList() {
+	const auto &vipEntries = IOLoginData::getVIPEntries(player->getAccountId());
+	const bool canSeeGhost = player->isAccessPlayer();
+
+	for (const VIPEntry &entry : vipEntries) {
+		VipStatus_t vipStatus = VipStatus_t::ONLINE;
+		std::shared_ptr<Player> vipPlayer = g_game().getPlayerByGUID(entry.guid);
+
+		if (!vipPlayer) {
+			vipStatus = VipStatus_t::OFFLINE;
+		} else if (!canSeeGhost && vipPlayer->isInGhostMode()) {
+			vipStatus = VipStatus_t::OFFLINE;
+		} else if (vipPlayer->isExerciseTraining()) {
+			vipStatus = VipStatus_t::TRAINING;
+		}
+
+		sendVIP(entry.guid, entry.name, entry.description, entry.icon, entry.notify, vipStatus);
+	}
+}
+
 void ProtocolGame::sendSpellCooldown(uint16_t spellId, uint32_t time) {
 	NetworkMessage msg;
 	msg.addByte(0xA4);
@@ -8376,7 +8386,11 @@ void ProtocolGame::AddPlayerStats(NetworkMessage &msg) {
 	msg.add<uint64_t>(player->getExperience());
 
 	msg.add<uint16_t>(player->getLevel());
-	msg.addByte(std::min<uint8_t>(player->getLevelPercent(), 100));
+	if (oldProtocol) {
+		msg.addByte(std::min<uint8_t>(player->getLevelPercent(), 100));
+	} else {
+		msg.add<uint16_t>(player->getLevelProgress()); // Protocol 15.21: uint16_t basis points
+	}
 
 	msg.add<uint16_t>(player->getBaseXpGain()); // base xp gain rate
 
@@ -10066,6 +10080,49 @@ void ProtocolGame::sendTakeScreenshot(Screenshot_t screenshotType) {
 	msg.addByte(0x75);
 	msg.addByte(screenshotType);
 	writeToOutputBuffer(msg);
+}
+
+// Protocol 15.21: send a client event (e.g., boss defeated, treasure found)
+// Kept alongside sendTakeScreenshot() for backward compat with screenshot-based code
+void ProtocolGame::sendClientEvent(ClientEvent_t eventType) {
+	if (oldProtocol || eventType == CLIENT_EVENT_NONE) {
+		return;
+	}
+	if (!g_configManager().getBoolean(ENABLE_SCREENSHOTS)) {
+		return;
+	}
+	NetworkMessage msg;
+	msg.addByte(0x75);
+	msg.addByte(static_cast<uint8_t>(eventType));
+	writeToOutputBuffer(msg);
+}
+
+// Protocol 15.21: send Monk vocation state to client (opcode 0xC1)
+// type: Harmony, Serenity, or Virtue | value: current state value
+void ProtocolGame::sendMonkState(MonkData_t type, uint8_t value) {
+	if (oldProtocol) {
+		return;
+	}
+	NetworkMessage msg;
+	msg.addByte(0xC1);
+	msg.addByte(static_cast<uint8_t>(type));
+	msg.addByte(value);
+	writeToOutputBuffer(msg);
+}
+
+// Protocol 15.21: parse Monk "aim at target" packet from client
+// NOTE: opcode not yet confirmed — register in parsePacket() once the final
+// Canary PR #3808 merge specifies the exact opcode byte.
+void ProtocolGame::parseAimAtTarget(NetworkMessage &msg) {
+	if (!player) {
+		return;
+	}
+	const uint8_t amount = msg.getByte();
+	for (uint8_t i = 0; i < amount; ++i) {
+		[[maybe_unused]] const uint16_t spellId = msg.get<uint16_t>();
+		[[maybe_unused]] const uint8_t state = msg.getByte();
+		// TODO: player->updateAimAtTargetSpells(spellId, state) when Player gains this method
+	}
 }
 
 void ProtocolGame::sendOutfitWindowCustomOTCR(NetworkMessage &msg) {

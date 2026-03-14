@@ -320,8 +320,8 @@ private:
 	void sendBosstiaryEntryChanged(uint32_t bossid);
 
 	void sendAllowBugReport();
-	void sendDistanceShoot(const Position &from, const Position &to, uint16_t type);
-	void sendMagicEffect(const Position &pos, uint16_t type);
+	void sendDistanceShoot(const Position &from, const Position &to, uint16_t type, uint8_t effectSource = ME_SOURCE_DEFAULT);
+	void sendMagicEffect(const Position &pos, uint16_t type, uint8_t effectSource = ME_SOURCE_DEFAULT);
 	void removeMagicEffect(const Position &pos, uint16_t type);
 	void sendRestingStatus(uint8_t protection);
 	void sendCreatureHealth(const std::shared_ptr<Creature> &creature);
@@ -412,6 +412,7 @@ private:
 	void sendUpdatedVIPStatus(uint32_t guid, VipStatus_t status);
 	void sendVIP(uint32_t guid, const std::string &name, const std::string &description, uint32_t icon, bool notify, VipStatus_t status);
 	void sendVIPGroups();
+	void sendFullVipList(); // Protocol 15.21: ghost-mode-aware consolidated VIP list
 
 	void sendPendingStateEntered();
 	void sendEnterWorld();
@@ -591,7 +592,13 @@ private:
 	void sendDoubleSoundEffect(const Position &pos, SoundEffect_t mainSoundId, SourceEffect_t mainSource, SoundEffect_t secondarySoundId, SourceEffect_t secondarySource);
 
 	void sendTakeScreenshot(Screenshot_t screenshotType);
+	void sendClientEvent(ClientEvent_t eventType); // Protocol 15.21: extended client event packet
+	void sendMonkState(MonkData_t type, uint8_t value); // Protocol 15.21: Monk vocation state (opcode 0xC1)
 	void sendDisableLoginMusic();
+
+	// Protocol 15.21: parse Monk "aim at target" packet from client
+	// Opcode TBD (confirm from Canary PR #3808 final merge)
+	void parseAimAtTarget(NetworkMessage &msg);
 
 	uint8_t m_playerDeathTime = 0;
 
